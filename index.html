@@ -15,95 +15,110 @@
 <body>
     <div class="container">
         <h1>Dog or Cat Classifier</h1>
-        <input type="file" id="fileInput" accept="image/*">
-        <br>
-        <button id="analyzeBtn">Analyze Image</button>
+        <input id="photo" type="file" accept="image/*">
         <div class="loading" id="loading">Processing...</div>
-        <div id="result"></div>
+        <div id="results"></div>
     </div>
 
-    <script type="module">
-        import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client/+esm";
-
-        let selectedFile = null;
-        let client = null;
-
-        // Initialize the client
-        async function initClient() {
+    <script>
+        async function loaded(reader) {
+            const loading = document.getElementById('loading');
+            const results = document.getElementById('results');
+            
+            loading.style.display = 'block';
+            results.innerHTML = '';
+            
             try {
-                client = await Client.connect("Ten-Jampa/minima_first");
-                console.log("Client connected successfully");
-            } catch (error) {
-                console.error("Failed to connect client:", error);
-                document.getElementById('result').textContent = 'Failed to connect to model. Please try again.';
-            }
-        }
-
-        // Initialize on page load
-        initClient();
-
-        document.getElementById('fileInput').addEventListener('change', function(e) {
-            selectedFile = e.target.files[0];
-            document.getElementById('result').textContent = '';
-        });
-
-        document.getElementById('analyzeBtn').addEventListener('click', async function() {
-            if (!selectedFile) {
-                document.getElementById('result').textContent = 'Please select an image first.';
-                return;
-            }
-
-            if (!client) {
-                document.getElementById('result').textContent = 'Client not connected. Please refresh the page.';
-                return;
-            }
-
-            // Show loading
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('result').textContent = '';
-            document.getElementById('analyzeBtn').disabled = true;
-
-            try {
-                console.log('Starting prediction...');
-                const result = await client.predict("/predict", { 
-                    img: selectedFile 
+                // Step 1: Submit the prediction request
+                const response = await fetch('https://ten-jampa-minima-first.hf.space/gradio_api/call/predict', {
+                    method: "POST", 
+                    body: JSON.stringify({ 
+                        "data": [{
+                            "path": reader.result,
+                            "meta": {"_type": "gradio.FileData"}
+                        }]
+                    }),
+                    headers: { "Content-Type": "application/json" }
                 });
                 
-                console.log('Prediction result:', result);
-                displayResult(result.data);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const json = await response.json();
+                const eventId = json.event_id;
+                
+                // Step 2: Poll for the result
+                const result = await pollForResult(eventId);
+                
+                // Step 3: Display the result
+                const label = result[0].label;
+                const confidences = result[0].confidences;
+                
+                let html = `<br/><img src="${reader.result}" width="300"> <p><strong>Result: ${label}</strong></p>`;
+                html += '<h4>Confidence Scores:</h4>';
+                
+                confidences.forEach(conf => {
+                    const percentage = (conf.confidence * 100).toFixed(2);
+                    html += `<p>${conf.label}: ${percentage}%</p>`;
+                });
+                
+                results.innerHTML = html;
                 
             } catch (error) {
-                console.error('Prediction error:', error);
-                document.getElementById('result').textContent = 'Error: ' + error.message;
+                console.error('Error:', error);
+                results.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
             } finally {
-                // Hide loading
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('analyzeBtn').disabled = false;
+                loading.style.display = 'none';
             }
-        });
-
-        function displayResult(data) {
-            const resultDiv = document.getElementById('result');
-            
-            if (!data || !data[0]) {
-                resultDiv.textContent = 'No result received from the model';
-                return;
-            }
-
-            const prediction = data[0];
-            const label = prediction.label;
-            const confidences = prediction.confidences;
-
-            let html = `<h3>Result: ${label}</h3>`;
-            html += '<h4>Confidence Scores:</h4>';
-            
-            confidences.forEach(conf => {
-                const percentage = (conf.confidence * 100).toFixed(2);
-                html += `<p>${conf.label}: ${percentage}%</p>`;
-            });
-
-            resultDiv.innerHTML = html;
         }
+        
+        async function pollForResult(eventId) {
+            const maxAttempts = 30;
+            let attempts = 0;
+            
+            while (attempts < maxAttempts) {
+                try {
+                    const response = await fetch(`https://ten-jampa-minima-first.hf.space/gradio_api/call/predict/${eventId}`);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const text = await response.text();
+                    const lines = text.split('\n');
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('event: complete')) {
+                            const dataLine = lines.find(l => l.startsWith('data: '));
+                            if (dataLine) {
+                                const jsonData = dataLine.substring(6);
+                                return JSON.parse(jsonData);
+                            }
+                        }
+                    }
+                    
+                    // Wait 1 second before next attempt
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    attempts++;
+                    
+                } catch (error) {
+                    console.error('Polling error:', error);
+                    attempts++;
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+            
+            throw new Error('Timeout waiting for result');
+        }
+        
+        function read() {
+            const reader = new FileReader();
+            reader.addEventListener('load', () => loaded(reader));
+            reader.readAsDataURL(photo.files[0]);
+        }
+        
+        photo.addEventListener('input', read);
     </script>
 </body>
 </html> 
