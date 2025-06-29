@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minima First - ML Model Demo (Is it a Cat  or a Dog)</title>
+    <title>Dog or Cat Classifier - ML Model Demo</title>
     <style>
         * {
             margin: 0;
@@ -26,7 +26,7 @@
             border-radius: 20px;
             box-shadow: 0 20px 40px rgba(0,0,0,0.1);
             padding: 40px;
-            max-width: 600px;
+            max-width: 700px;
             width: 100%;
             text-align: center;
         }
@@ -135,10 +135,67 @@
             font-weight: 600;
         }
 
-        .result-content {
+        .prediction-result {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+        }
+
+        .probability-bars {
+            margin: 20px 0;
+        }
+
+        .probability-item {
+            display: flex;
+            align-items: center;
+            margin: 15px 0;
+            padding: 10px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .animal-icon {
+            font-size: 2rem;
+            margin-right: 15px;
+            width: 50px;
+            text-align: center;
+        }
+
+        .probability-info {
+            flex: 1;
+            text-align: left;
+        }
+
+        .animal-name {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .probability-text {
             color: #666;
-            font-size: 1rem;
-            line-height: 1.6;
+            font-size: 0.9rem;
+        }
+
+        .probability-bar {
+            width: 200px;
+            height: 20px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-left: 15px;
+        }
+
+        .probability-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #45a049);
+            transition: width 0.5s ease;
+            border-radius: 10px;
         }
 
         .loading {
@@ -184,6 +241,13 @@
             font-weight: 600;
         }
 
+        .demo-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
         .demo-btn {
             background: #4CAF50;
             color: white;
@@ -193,19 +257,37 @@
             font-size: 0.9rem;
             cursor: pointer;
             transition: all 0.3s ease;
-            margin: 5px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
 
         .demo-btn:hover {
             background: #45a049;
             transform: translateY(-1px);
         }
+
+        .demo-btn.dog {
+            background: #FF6B6B;
+        }
+
+        .demo-btn.dog:hover {
+            background: #FF5252;
+        }
+
+        .demo-btn.cat {
+            background: #4ECDC4;
+        }
+
+        .demo-btn.cat:hover {
+            background: #26A69A;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Minima First</h1>
-        <p class="subtitle">ML Model Demo - Powered by Hugging Face Gradio</p>
+        <h1>🐕 Dog or Cat? 🐱</h1>
+        <p class="subtitle">Upload an image and let AI tell you if it's a dog or cat!</p>
         
         <div class="upload-area" id="uploadArea">
             <div class="upload-icon">📁</div>
@@ -217,25 +299,33 @@
         <div class="preview-container" id="previewContainer">
             <img id="imagePreview" alt="Preview">
             <br>
-            <button class="btn" id="analyzeBtn">Analyze Image</button>
-            <button class="btn" id="resetBtn">Reset</button>
+            <button class="btn" id="analyzeBtn">🔍 Classify Image</button>
+            <button class="btn" id="resetBtn">🔄 Reset</button>
         </div>
 
         <div class="demo-section">
             <div class="demo-title">Quick Demo</div>
-            <button class="demo-btn" onclick="useDemoImage()">Use Demo Image</button>
+            <div class="demo-buttons">
+                <button class="demo-btn dog" onclick="useDemoImage('dog')">
+                    🐕 Dog Demo
+                </button>
+                <button class="demo-btn cat" onclick="useDemoImage('cat')">
+                    🐱 Cat Demo
+                </button>
+            </div>
         </div>
 
         <div class="loading" id="loading">
             <div class="spinner"></div>
-            <div>Processing your image...</div>
+            <div>Analyzing your image...</div>
         </div>
 
         <div class="error" id="error"></div>
 
         <div class="result-container" id="resultContainer">
-            <div class="result-title">Analysis Result</div>
-            <div class="result-content" id="resultContent"></div>
+            <div class="result-title">Classification Result</div>
+            <div class="prediction-result" id="predictionResult"></div>
+            <div class="probability-bars" id="probabilityBars"></div>
         </div>
     </div>
 
@@ -250,7 +340,8 @@
         const loading = document.getElementById('loading');
         const error = document.getElementById('error');
         const resultContainer = document.getElementById('resultContainer');
-        const resultContent = document.getElementById('resultContent');
+        const predictionResult = document.getElementById('predictionResult');
+        const probabilityBars = document.getElementById('probabilityBars');
 
         let selectedFile = null;
 
@@ -348,18 +439,23 @@
             }
         }
 
-        async function useDemoImage() {
+        async function useDemoImage(type) {
             try {
                 showLoading();
                 hideError();
                 hideResult();
 
-                // Use the demo image from the README
-                const demoImageUrl = 'https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png';
+                // Use appropriate demo images for dog/cat classification
+                let demoImageUrl;
+                if (type === 'dog') {
+                    demoImageUrl = 'https://images.unsplash.com/photo-1547407139-3c921a66005c?w=400&h=300&fit=crop';
+                } else {
+                    demoImageUrl = 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=400&h=300&fit=crop';
+                }
                 
                 const response = await fetch(demoImageUrl);
                 const blob = await response.blob();
-                const file = new File([blob], 'demo-bus.png', { type: 'image/png' });
+                const file = new File([blob], `demo-${type}.jpg`, { type: 'image/jpeg' });
                 
                 handleFile(file);
                 
@@ -407,23 +503,89 @@
         }
 
         function showResult(result) {
-            // Format the result nicely
-            let formattedResult = '';
+            // Parse the result to get probabilities
+            let probabilities = {};
             
             if (result && result.data) {
-                if (Array.isArray(result.data)) {
-                    formattedResult = result.data.map((item, index) => 
-                        `Result ${index + 1}: ${JSON.stringify(item, null, 2)}`
-                    ).join('\n\n');
-                } else {
-                    formattedResult = JSON.stringify(result.data, null, 2);
+                // Handle different possible response formats
+                if (Array.isArray(result.data) && result.data.length > 0) {
+                    const firstResult = result.data[0];
+                    if (typeof firstResult === 'object') {
+                        probabilities = firstResult;
+                    } else if (typeof firstResult === 'string') {
+                        try {
+                            probabilities = JSON.parse(firstResult);
+                        } catch (e) {
+                            probabilities = { 'Unknown': firstResult };
+                        }
+                    }
+                } else if (typeof result.data === 'object') {
+                    probabilities = result.data;
                 }
-            } else {
-                formattedResult = JSON.stringify(result, null, 2);
             }
+
+            // Display the prediction
+            const prediction = getPrediction(probabilities);
+            predictionResult.textContent = prediction;
+            predictionResult.style.display = 'block';
+
+            // Display probability bars
+            displayProbabilityBars(probabilities);
             
-            resultContent.textContent = formattedResult;
             resultContainer.style.display = 'block';
+        }
+
+        function getPrediction(probabilities) {
+            if (!probabilities || Object.keys(probabilities).length === 0) {
+                return '❓ Unable to classify';
+            }
+
+            const entries = Object.entries(probabilities);
+            const maxEntry = entries.reduce((max, current) => 
+                current[1] > max[1] ? current : max
+            );
+
+            const animal = maxEntry[0].toLowerCase();
+            const confidence = (maxEntry[1] * 100).toFixed(1);
+            
+            if (animal.includes('dog')) {
+                return `🐕 It's a Dog! (${confidence}% confident)`;
+            } else if (animal.includes('cat')) {
+                return `🐱 It's a Cat! (${confidence}% confident)`;
+            } else {
+                return `🤔 ${maxEntry[0]} (${confidence}% confident)`;
+            }
+        }
+
+        function displayProbabilityBars(probabilities) {
+            probabilityBars.innerHTML = '';
+            
+            if (!probabilities || Object.keys(probabilities).length === 0) {
+                probabilityBars.innerHTML = '<p>No probability data available</p>';
+                return;
+            }
+
+            const entries = Object.entries(probabilities).sort((a, b) => b[1] - a[1]);
+            
+            entries.forEach(([animal, probability]) => {
+                const percentage = (probability * 100).toFixed(1);
+                const icon = animal.toLowerCase().includes('dog') ? '🐕' : 
+                           animal.toLowerCase().includes('cat') ? '🐱' : '🐾';
+                
+                const item = document.createElement('div');
+                item.className = 'probability-item';
+                item.innerHTML = `
+                    <div class="animal-icon">${icon}</div>
+                    <div class="probability-info">
+                        <div class="animal-name">${animal}</div>
+                        <div class="probability-text">${percentage}%</div>
+                    </div>
+                    <div class="probability-bar">
+                        <div class="probability-fill" style="width: ${percentage}%"></div>
+                    </div>
+                `;
+                probabilityBars.appendChild(item);
+            });
         }
 
         function hideResult() {

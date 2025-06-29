@@ -1,22 +1,33 @@
-# Minima First - ML Model Demo
+# Dog or Cat Classifier - ML Model Demo
 
-A minimal static GitHub Pages site that demonstrates the integration with a Hugging Face ML Gradio model.
+A minimal static GitHub Pages site that demonstrates a dog/cat classification model using Hugging Face Gradio.
 
 ## Overview
 
-This repository contains a simple, elegant web interface for interacting with the ML model hosted on Hugging Face Spaces. The site is designed to be deployed as a static GitHub Pages site.
+This repository contains a simple, elegant web interface for classifying images as either dogs or cats. The site is designed to be deployed as a static GitHub Pages site and integrates with a Hugging Face ML model that returns probability dictionaries.
 
 ## Features
 
 - 🎨 Modern, responsive design
 - 📁 Drag & drop image upload
-- 🔄 Real-time image analysis
+- 🔄 Real-time image classification
+- 📊 Probability bars showing confidence levels
 - 📱 Mobile-friendly interface
 - ⚡ Fast and lightweight
+- 🐕🐱 Dog and cat demo images
 
 ## Model Information
 
 The site integrates with the Hugging Face model: `Ten-Jampa/minima_first`
+
+### Model Output
+The model takes images as input and returns a dictionary of probabilities, for example:
+```json
+{
+  "dog": 0.85,
+  "cat": 0.15
+}
+```
 
 ### Using the Model with Python
 
@@ -53,6 +64,16 @@ php -S localhost:8000
 
 3. Visit `http://localhost:8000` in your browser
 
+## How It Works
+
+1. **Upload Image**: Users can upload or drag-and-drop an image
+2. **API Call**: The image is converted to base64 and sent to the Hugging Face Gradio API
+3. **Classification**: The model analyzes the image and returns probability scores
+4. **Display Results**: The interface shows:
+   - Main prediction (Dog or Cat)
+   - Confidence percentage
+   - Visual probability bars for each class
+
 ## Deployment
 
 ### GitHub Pages
@@ -76,9 +97,26 @@ This site can be deployed to any static hosting service:
 
 ```
 minima_first/
-├── index.html          # Main application file
+├── index.html          # Main application file with UI and API integration
 ├── README.md          # This file
 └── .gitignore         # Git ignore rules
+```
+
+## API Integration Details
+
+The site makes POST requests to the Hugging Face Gradio API endpoint:
+```
+https://ten-jampa-minima-first.hf.space/api/predict/
+```
+
+The request format:
+```json
+{
+  "data": [
+    "data:image/jpeg;base64,<base64-encoded-image>"
+  ],
+  "fn_index": 0
+}
 ```
 
 ## Customization
